@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ink_dark">#102032</color>
+    <color name="ink_mid">#19324B</color>
+    <color name="teal">#17A5A3</color>
+    <color name="teal_dark">#0F7D7B</color>
+    <color name="mist">#D9E5F2</color>
+    <color name="panel">#F7FBFF</color>
+    <color name="panel_border">#D7E4F0</color>
+    <color name="slate">#50657B</color>
+    <color name="transcript_bg">#0E1A28</color>
+    <color name="white">#FFFFFF</color>
+</resources>

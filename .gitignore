@@ -1,0 +1,13 @@
+.DS_Store
+
+# Local build outputs
+/build/
+/.gradle-home/
+/models/
+
+# Local signing and Android tooling artifacts
+/debug.keystore
+local.properties
+
+# Generated APK signing sidecars
+*.idsig

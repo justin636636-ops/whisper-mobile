@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">离线会议转写</string>
+    <string name="app_subtitle">本地运行、优先离线、适合中文会议记录，也能兼容少量英文单词。</string>
+    <string name="label_status">当前状态</string>
+    <string name="label_transcript">转写结果</string>
+    <string name="label_notes">使用说明</string>
+    <string name="action_start">开始转写</string>
+    <string name="action_stop">停止转写</string>
+    <string name="action_clear">清空文本</string>
+    <string name="action_copy">复制文本</string>
+    <string name="action_save">保存到本机</string>
+    <string name="option_continuous">会议连续模式：每段结束后自动继续监听</string>
+    <string name="option_mixed_language">中英夹杂模式：尽量保留少量英文词</string>
+    <string name="transcript_hint">建议把手机放在会议桌中央，离发言人 0.5 到 2 米，安静环境下识别更稳。</string>
+    <string name="transcript_placeholder">转写内容会显示在这里。点击“开始转写”后，系统会请求麦克风权限。</string>
+    <string name="partial_prefix">正在识别： </string>
+    <string name="notes_body">1. 本版本是纯本地 APK，不依赖云端上传。\n2. 当前识别依赖 Android 设备上的离线语音识别能力；若系统未安装中文离线语音包，效果会受影响。\n3. 你这类 8 Gen 2 / 8 Elite 设备非常适合后续升级到更强的 Whisper 本地引擎，到时长会议和文件转写会更稳。\n4. 点击“保存到本机”后，文本会存到 App 私有文档目录，路径会在提示里显示。</string>
+
+    <string name="status_idle">准备就绪，等待开始</string>
+    <string name="status_listening">已开始，正在离线监听</string>
+    <string name="status_ready">麦克风已就绪，请开始说话</string>
+    <string name="status_speaking">正在收音并识别</string>
+    <string name="status_finishing">语音片段结束，正在整理文字</string>
+    <string name="status_cycle_done">本段完成，正在进入下一轮监听</string>
+    <string name="status_done">本轮转写完成</string>
+    <string name="status_stopping">正在停止当前会话</string>
+    <string name="status_stopped">已停止</string>
+    <string name="status_cleared">内容已清空</string>
+    <string name="status_retrying">识别中断：%1$s，正在自动重试</string>
+    <string name="status_error">识别失败：%1$s</string>
+    <string name="status_start_failed">启动失败：%1$s</string>
+    <string name="status_permission_denied">没有麦克风权限，无法开始转写</string>
+    <string name="status_recognizer_missing">设备上没有可用的语音识别服务</string>
+
+    <string name="engine_on_device_ready">识别引擎：检测到 Android 端侧离线识别能力，可优先本地运行。</string>
+    <string name="engine_system_offline">识别引擎：将优先调用系统离线识别；如设备没装离线语音包，可能退化或不可用。</string>
+
+    <string name="toast_empty">当前没有可复制或保存的内容</string>
+    <string name="toast_copied">文字已复制到剪贴板</string>
+    <string name="toast_saved">已保存：%1$s</string>
+    <string name="toast_save_failed">保存失败，未找到可写目录</string>
+    <string name="toast_save_error">保存失败：%1$s</string>
+
+    <string name="error_audio">麦克风音频异常</string>
+    <string name="error_client">识别客户端中断</string>
+    <string name="error_permission">没有麦克风权限</string>
+    <string name="error_network">识别服务试图联网但失败</string>
+    <string name="error_network_timeout">识别服务网络超时</string>
+    <string name="error_no_match">没有识别到清晰语音</string>
+    <string name="error_busy">识别器正在忙</string>
+    <string name="error_server">系统识别服务异常</string>
+    <string name="error_timeout">长时间没有检测到讲话</string>
+    <string name="error_language_not_supported">当前系统不支持所选语言</string>
+    <string name="error_language_unavailable">当前语言离线包不可用</string>
+    <string name="error_server_disconnected">识别服务断开</string>
+    <string name="error_unknown">未知错误（%1$d）</string>
+</resources>
