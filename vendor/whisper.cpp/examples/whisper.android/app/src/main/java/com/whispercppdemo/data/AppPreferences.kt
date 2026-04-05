@@ -45,6 +45,7 @@ object AppPreferences {
     private const val MAX_LOG_LINES = 48
     private const val MAX_LOG_CHARS = 4_000
     private const val KEY_DARK_THEME = "dark_theme"
+    private const val KEY_PROFESSIONAL_MONITOR = "professional_monitor"
     private const val KEY_SELECTED_MODEL = "selected_model"
     private const val KEY_SELECTED_AUDIO_PATH = "selected_audio_path"
     private const val KEY_SELECTED_AUDIO_NAME = "selected_audio_name"
@@ -82,6 +83,14 @@ object AppPreferences {
 
     fun setDarkThemeEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_DARK_THEME, enabled).apply()
+    }
+
+    fun isProfessionalMonitorEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_PROFESSIONAL_MONITOR, false)
+    }
+
+    fun setProfessionalMonitorEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_PROFESSIONAL_MONITOR, enabled).apply()
     }
 
     fun selectedModelName(context: Context): String? {

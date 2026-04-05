@@ -1,12 +1,19 @@
 package com.whispercppdemo.ui.main
 
+import android.app.ActivityManager
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context.CLIPBOARD_SERVICE
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.net.Uri
+import android.os.BatteryManager
+import android.os.Debug
+import android.os.Process
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -33,6 +40,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -50,9 +60,25 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
         private set
     var isRecording by mutableStateOf(false)
         private set
+    var appMemoryBytes by mutableStateOf<Long?>(null)
+        private set
+    var appCpuUsagePercent by mutableStateOf<Float?>(null)
+        private set
     var elapsedMs by mutableStateOf(0L)
         private set
     var estimatedRemainingMs by mutableStateOf<Long?>(null)
+        private set
+    var availableRamBytes by mutableStateOf<Long?>(null)
+        private set
+    var totalRamBytes by mutableStateOf<Long?>(null)
+        private set
+    var isProfessionalMonitorEnabled by mutableStateOf(false)
+        private set
+    var memoryPressureLabel by mutableStateOf("检测中")
+        private set
+    var modelFileSizeBytes by mutableStateOf<Long?>(null)
+        private set
+    var modelRuntimeMemoryBytes by mutableStateOf<Long?>(null)
         private set
     var progressFraction by mutableStateOf<Float?>(null)
         private set
@@ -67,6 +93,12 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
     var showTimestamps by mutableStateOf(true)
         private set
     var statusText by mutableStateOf("准备中")
+        private set
+    var temperatureCelsius by mutableStateOf<Float?>(null)
+        private set
+    var temperatureTrendLabel by mutableStateOf("检测中")
+        private set
+    var threadCount by mutableStateOf<Int?>(null)
         private set
     var transcriptText by mutableStateOf("")
         private set
@@ -114,6 +146,10 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
     private val modelsPath = File(application.filesDir, "models")
     private val importsPath = File(application.filesDir, "imports")
     private val recordingsPath = File(application.filesDir, "recordings")
+    private var idleNativeHeapBytes: Long? = null
+    private var lastCpuSample: CpuSample? = null
+    private var lastTemperatureSample: Float? = null
+    private var performanceMonitorJob: Job? = null
     private var recorder = Recorder()
     private var recordedFile: File? = null
     private var selectedAudioFile: File? = null
@@ -126,6 +162,7 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
 
     init {
         prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
+        startPerformanceMonitor()
         viewModelScope.launch {
             initialize()
         }
@@ -140,6 +177,7 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
         restoreModelSelection()
         restoreTranscriptionOptions()
         restoreSelectedAudio()
+        isProfessionalMonitorEnabled = AppPreferences.isProfessionalMonitorEnabled(application)
         refreshStateFromPreferences()
         clearStaleTranscriptionIfNeeded()
         resumeInterruptedTranscriptionIfPossible()
@@ -380,6 +418,12 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
         AppPreferences.setDarkThemeEnabled(application, next)
     }
 
+    fun toggleProfessionalMonitor() {
+        val next = !isProfessionalMonitorEnabled
+        isProfessionalMonitorEnabled = next
+        AppPreferences.setProfessionalMonitorEnabled(application, next)
+    }
+
     fun toggleRecord() = viewModelScope.launch {
         try {
             if (isRecording) {
@@ -421,8 +465,101 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
     }
 
     override fun onCleared() {
+        performanceMonitorJob?.cancel()
         prefs.unregisterOnSharedPreferenceChangeListener(preferenceListener)
         super.onCleared()
+    }
+
+    private fun startPerformanceMonitor() {
+        performanceMonitorJob?.cancel()
+        performanceMonitorJob = viewModelScope.launch {
+            while (isActive) {
+                refreshPerformanceStats()
+                delay(if (isProcessing || isPaused) 1_000L else 2_500L)
+            }
+        }
+    }
+
+    private suspend fun refreshPerformanceStats() {
+        val snapshot = withContext(Dispatchers.Default) {
+            val activityManager =
+                application.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val systemMemoryInfo = ActivityManager.MemoryInfo().also(activityManager::getMemoryInfo)
+            val processMemoryInfo = Debug.MemoryInfo().also { Debug.getMemoryInfo(it) }
+            val currentNativeHeapBytes = Debug.getNativeHeapAllocatedSize().coerceAtLeast(0L)
+            val cpuSample = CpuSample(
+                processCpuMs = Process.getElapsedCpuTime().coerceAtLeast(0L),
+                elapsedRealtimeMs = SystemClock.elapsedRealtime().coerceAtLeast(0L),
+            )
+            val selectedModelFile = selectedModelName
+                ?.let { File(modelsPath, it) }
+                ?.takeIf { it.exists() && it.isFile }
+            val batteryStatus = application.registerReceiver(
+                null,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+            )
+            val temperatureTenths = batteryStatus
+                ?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+                ?.takeIf { it != Int.MIN_VALUE }
+            val temperatureValue = temperatureTenths?.toFloat()?.div(10f)
+            val threadCountValue = File("/proc/self/task").list()?.size
+
+            val modelFileBytes = selectedModelFile?.length()?.coerceAtLeast(0L)
+            val availableBytes = systemMemoryInfo.availMem.coerceAtLeast(0L)
+            val totalBytes = systemMemoryInfo.totalMem.coerceAtLeast(0L)
+            val appPssBytes = processMemoryInfo.totalPss.toLong().coerceAtLeast(0L) * 1024L
+            val pressureRatio = if (totalBytes > 0L) {
+                availableBytes.toDouble() / totalBytes.toDouble()
+            } else {
+                0.0
+            }
+            val pressureLabel = when {
+                systemMemoryInfo.lowMemory || pressureRatio < 0.10 -> "紧张"
+                pressureRatio < 0.20 -> "偏低"
+                else -> "正常"
+            }
+
+            PerformanceSnapshot(
+                appMemoryBytes = appPssBytes,
+                availableRamBytes = availableBytes,
+                totalRamBytes = totalBytes,
+                memoryPressureLabel = pressureLabel,
+                modelFileSizeBytes = modelFileBytes,
+                nativeHeapBytes = currentNativeHeapBytes,
+                cpuSample = cpuSample,
+                temperatureCelsius = temperatureValue,
+                threadCount = threadCountValue,
+            )
+        }
+
+        if (!isProcessing && !isPaused) {
+            idleNativeHeapBytes = snapshot.nativeHeapBytes
+        }
+
+        appMemoryBytes = snapshot.appMemoryBytes
+        availableRamBytes = snapshot.availableRamBytes
+        totalRamBytes = snapshot.totalRamBytes
+        memoryPressureLabel = snapshot.memoryPressureLabel
+        modelFileSizeBytes = snapshot.modelFileSizeBytes
+        threadCount = snapshot.threadCount
+        modelRuntimeMemoryBytes = if (isProcessing) {
+            idleNativeHeapBytes
+                ?.let { baseline -> (snapshot.nativeHeapBytes - baseline).coerceAtLeast(0L) }
+        } else {
+            0L
+        }
+        appCpuUsagePercent = lastCpuSample?.let { previous ->
+            val wallDeltaMs = (snapshot.cpuSample.elapsedRealtimeMs - previous.elapsedRealtimeMs)
+                .coerceAtLeast(1L)
+            val cpuDeltaMs = (snapshot.cpuSample.processCpuMs - previous.processCpuMs)
+                .coerceAtLeast(0L)
+            val coreCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+            ((cpuDeltaMs.toFloat() / (wallDeltaMs.toFloat() * coreCount.toFloat())) * 100f)
+                .coerceIn(0f, 999f)
+        }
+        lastCpuSample = snapshot.cpuSample
+        temperatureCelsius = snapshot.temperatureCelsius
+        temperatureTrendLabel = buildTemperatureTrend(snapshot.temperatureCelsius)
     }
 
     private fun enqueueTranscription(audioFile: File, sourceName: String, clearExistingLog: Boolean = false) {
@@ -648,6 +785,26 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
         activityLog = AppPreferences.readSnapshot(application).activityLog
     }
 
+    private fun buildTemperatureTrend(currentTemperature: Float?): String {
+        if (currentTemperature == null) {
+            lastTemperatureSample = null
+            return "不可用"
+        }
+
+        val previous = lastTemperatureSample
+        lastTemperatureSample = currentTemperature
+        if (previous == null) {
+            return "稳定"
+        }
+
+        val delta = currentTemperature - previous
+        return when {
+            delta >= 0.3f -> String.format(Locale.getDefault(), "升温中 (+%.1f°C)", delta)
+            delta <= -0.3f -> String.format(Locale.getDefault(), "回落中 (%.1f°C)", delta)
+            else -> "稳定"
+        }
+    }
+
     private fun tempRecordingFile(): File {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         return File(recordingsPath, "meeting_$timestamp.wav")
@@ -663,6 +820,23 @@ class MainScreenViewModel(private val application: Application) : ViewModel() {
         }
     }
 }
+
+private data class PerformanceSnapshot(
+    val appMemoryBytes: Long,
+    val availableRamBytes: Long,
+    val totalRamBytes: Long,
+    val memoryPressureLabel: String,
+    val modelFileSizeBytes: Long?,
+    val nativeHeapBytes: Long,
+    val cpuSample: CpuSample,
+    val temperatureCelsius: Float?,
+    val threadCount: Int?,
+)
+
+private data class CpuSample(
+    val processCpuMs: Long,
+    val elapsedRealtimeMs: Long,
+)
 
 private fun stripTranscriptTimestamps(text: String): String {
     return text.lineSequence()

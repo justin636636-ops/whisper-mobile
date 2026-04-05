@@ -105,6 +105,7 @@ class TranscriptionService : Service() {
         val chunkOverlapSamples = (SAMPLE_RATE * overlapSecondsForChunk(chunkDurationSeconds))
             .coerceAtMost(chunkSizeSamples / 3)
             .coerceAtLeast(SAMPLE_RATE * 2)
+        val decodedCacheDir = File(applicationContext.cacheDir, "decoded-audio")
         var whisperContext: WhisperContext? = null
         val snapshotAtRunStart = AppPreferences.readSnapshot(applicationContext)
         var baseElapsedMs = if (resumeRequested) snapshotAtRunStart.elapsedMs else 0L
@@ -150,8 +151,8 @@ class TranscriptionService : Service() {
                 runStartedAtMs,
                 false,
             )
-            val audioSamples = withContext(Dispatchers.IO) {
-                decodeAudioFile(audioFile) { decodeFraction ->
+            val decodedAudio = withContext(Dispatchers.IO) {
+                decodeAudioFile(audioFile, decodedCacheDir) { decodeFraction ->
                     val mappedProgress = 0.12f + (0.06f * decodeFraction.coerceIn(0f, 1f))
                     updateProgressState(
                         sourceName,
@@ -164,10 +165,15 @@ class TranscriptionService : Service() {
                     )
                 }
             }
+            val audioSamples = decodedAudio.samples
             val audioDurationMs = (audioSamples.size * 1000L / SAMPLE_RATE.toLong()).coerceAtLeast(1_000L)
             AppPreferences.appendLog(
                 applicationContext,
                 "音频解码完成，时长约 ${audioDurationMs / 1000}s"
+            )
+            AppPreferences.appendLog(
+                applicationContext,
+                if (decodedAudio.cacheHit) "命中音频解码缓存，直接复用上次结果" else "已更新音频解码缓存"
             )
 
             val totalChunks = ceil(audioSamples.size / chunkSizeSamples.toDouble()).toInt().coerceAtLeast(1)

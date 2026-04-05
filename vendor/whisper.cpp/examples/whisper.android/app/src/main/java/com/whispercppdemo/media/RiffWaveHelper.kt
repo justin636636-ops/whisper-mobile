@@ -7,21 +7,69 @@ import android.media.MediaFormat
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.MessageDigest
 import kotlin.math.floor
 import kotlin.math.min
 
 private const val TARGET_SAMPLE_RATE = 16_000
 private const val CODEC_TIMEOUT_US = 10_000L
 private const val MAX_IDLE_OUTPUT_POLLS = 600
+private const val MAX_DECODE_CACHE_FILES = 6
+private const val DECODE_CACHE_VERSION = 1
 
-fun decodeAudioFile(file: File, onProgress: ((Float) -> Unit)? = null): FloatArray {
+data class DecodedAudioResult(
+    val samples: FloatArray,
+    val cacheHit: Boolean,
+)
+
+fun decodeAudioFile(
+    file: File,
+    cacheDir: File? = null,
+    onProgress: ((Float) -> Unit)? = null,
+): DecodedAudioResult {
     return if (file.extension.equals("wav", ignoreCase = true)) {
-        decodeWaveFile(file).also {
-            onProgress?.invoke(1f)
-        }
+        DecodedAudioResult(
+            samples = decodeWaveFile(file).also {
+                onProgress?.invoke(1f)
+            },
+            cacheHit = false,
+        )
+    } else if (cacheDir != null) {
+        decodeCompressedAudioFileWithCache(file, cacheDir, onProgress)
     } else {
-        decodeCompressedAudioFile(file, onProgress)
+        DecodedAudioResult(
+            samples = decodeCompressedAudioFile(file, onProgress),
+            cacheHit = false,
+        )
     }
+}
+
+private fun decodeCompressedAudioFileWithCache(
+    file: File,
+    cacheDir: File,
+    onProgress: ((Float) -> Unit)?,
+): DecodedAudioResult {
+    cacheDir.mkdirs()
+    val cacheFile = File(cacheDir, "${decodedAudioCacheKey(file)}.wav")
+    if (cacheFile.exists() && cacheFile.length() > 44L) {
+        onProgress?.invoke(0.2f)
+        return DecodedAudioResult(
+            samples = decodeWaveFile(cacheFile).also {
+                onProgress?.invoke(1f)
+            },
+            cacheHit = true,
+        )
+    }
+
+    val samples = decodeCompressedAudioFile(file, onProgress)
+    runCatching {
+        writeDecodedWaveCache(cacheFile, samples)
+        cleanupDecodedAudioCache(cacheDir, cacheFile)
+    }
+    return DecodedAudioResult(
+        samples = samples,
+        cacheHit = false,
+    )
 }
 
 fun decodeWaveFile(file: File): FloatArray {
@@ -41,6 +89,38 @@ fun decodeWaveFile(file: File): FloatArray {
         (mixed / channelCount.toFloat()).coerceIn(-1f, 1f)
     }
     return resampleIfNeeded(mono, sampleRate)
+}
+
+private fun writeDecodedWaveCache(file: File, data: FloatArray) {
+    val shortData = ShortArray(data.size) { index ->
+        (data[index].coerceIn(-1f, 1f) * 32767f).toInt()
+            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            .toShort()
+    }
+    encodeWaveFile(file, shortData)
+}
+
+private fun cleanupDecodedAudioCache(cacheDir: File, keepFile: File) {
+    cacheDir.listFiles()
+        ?.filter { it.isFile && it.extension.equals("wav", ignoreCase = true) && it != keepFile }
+        ?.sortedByDescending { it.lastModified() }
+        ?.drop(MAX_DECODE_CACHE_FILES - 1)
+        ?.forEach { it.delete() }
+}
+
+private fun decodedAudioCacheKey(file: File): String {
+    val fingerprint = buildString {
+        append(DECODE_CACHE_VERSION)
+        append('|')
+        append(file.absolutePath)
+        append('|')
+        append(file.length())
+        append('|')
+        append(file.lastModified())
+    }
+    return MessageDigest.getInstance("SHA-256")
+        .digest(fingerprint.toByteArray())
+        .joinToString("") { byte -> "%02x".format(byte) }
 }
 
 fun encodeWaveFile(file: File, data: ShortArray) {

@@ -50,6 +50,7 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.whispercppdemo.transcription.ChunkDurationOption
 import com.whispercppdemo.transcription.LanguageOption
+import java.util.Locale
 
 @Composable
 fun MainScreen(viewModel: MainScreenViewModel) {
@@ -63,14 +64,21 @@ fun MainScreen(viewModel: MainScreenViewModel) {
         canRecord = viewModel.canRecord,
         canStartSelectedFile = viewModel.canStartSelectedFile,
         displayedTranscriptText = viewModel.displayedTranscriptText,
+        appMemoryBytes = viewModel.appMemoryBytes,
+        appCpuUsagePercent = viewModel.appCpuUsagePercent,
         availableChunkDurations = viewModel.availableChunkDurations,
         availableLanguageModes = viewModel.availableLanguageModes,
+        availableRamBytes = viewModel.availableRamBytes,
         elapsedMs = viewModel.elapsedMs,
         estimatedRemainingMs = viewModel.estimatedRemainingMs,
         isDarkTheme = viewModel.isDarkTheme,
         isPaused = viewModel.isPaused,
         isProcessing = viewModel.isProcessing,
+        isProfessionalMonitorEnabled = viewModel.isProfessionalMonitorEnabled,
         isRecording = viewModel.isRecording,
+        memoryPressureLabel = viewModel.memoryPressureLabel,
+        modelFileSizeBytes = viewModel.modelFileSizeBytes,
+        modelRuntimeMemoryBytes = viewModel.modelRuntimeMemoryBytes,
         progressFraction = viewModel.progressFraction,
         selectedAudioName = viewModel.selectedAudioName,
         selectedChunkDurationLabel = viewModel.selectedChunkDurationLabel,
@@ -78,6 +86,10 @@ fun MainScreen(viewModel: MainScreenViewModel) {
         selectedModelName = viewModel.selectedModelName,
         showTimestamps = viewModel.showTimestamps,
         statusText = viewModel.statusText,
+        temperatureCelsius = viewModel.temperatureCelsius,
+        temperatureTrendLabel = viewModel.temperatureTrendLabel,
+        threadCount = viewModel.threadCount,
+        totalRamBytes = viewModel.totalRamBytes,
         onSelectChunkDuration = viewModel::selectChunkDuration,
         onSelectLanguageMode = viewModel::selectLanguageMode,
         onImportAudio = viewModel::importAudio,
@@ -91,6 +103,7 @@ fun MainScreen(viewModel: MainScreenViewModel) {
         onToggleRecord = viewModel::toggleRecord,
         onToggleTimestampVisibility = viewModel::toggleTimestampVisibility,
         onToggleTheme = viewModel::toggleTheme,
+        onToggleProfessionalMonitor = viewModel::toggleProfessionalMonitor,
     )
 }
 
@@ -106,14 +119,21 @@ private fun MainScreen(
     canRecord: Boolean,
     canStartSelectedFile: Boolean,
     displayedTranscriptText: String,
+    appMemoryBytes: Long?,
+    appCpuUsagePercent: Float?,
     availableChunkDurations: List<ChunkDurationOption>,
     availableLanguageModes: List<LanguageOption>,
+    availableRamBytes: Long?,
     elapsedMs: Long,
     estimatedRemainingMs: Long?,
     isDarkTheme: Boolean,
     isPaused: Boolean,
     isProcessing: Boolean,
+    isProfessionalMonitorEnabled: Boolean,
     isRecording: Boolean,
+    memoryPressureLabel: String,
+    modelFileSizeBytes: Long?,
+    modelRuntimeMemoryBytes: Long?,
     progressFraction: Float?,
     selectedAudioName: String?,
     selectedChunkDurationLabel: String,
@@ -121,6 +141,10 @@ private fun MainScreen(
     selectedModelName: String?,
     showTimestamps: Boolean,
     statusText: String,
+    temperatureCelsius: Float?,
+    temperatureTrendLabel: String,
+    threadCount: Int?,
+    totalRamBytes: Long?,
     onSelectChunkDuration: (Int) -> Unit,
     onSelectLanguageMode: (String) -> Unit,
     onImportAudio: (Uri) -> Unit,
@@ -132,6 +156,7 @@ private fun MainScreen(
     onSelectModel: (String) -> Unit,
     onStartSelectedAudio: () -> Unit,
     onToggleRecord: () -> Unit,
+    onToggleProfessionalMonitor: () -> Unit,
     onToggleTimestampVisibility: () -> Unit,
     onToggleTheme: () -> Unit,
 ) {
@@ -204,6 +229,22 @@ private fun MainScreen(
                 isPaused = isPaused,
                 isDarkTheme = isDarkTheme,
             )
+            PerformanceCard(
+                appMemoryBytes = appMemoryBytes,
+                appCpuUsagePercent = appCpuUsagePercent,
+                availableRamBytes = availableRamBytes,
+                isDarkTheme = isDarkTheme,
+                isProcessing = isProcessing,
+                isProfessionalMonitorEnabled = isProfessionalMonitorEnabled,
+                memoryPressureLabel = memoryPressureLabel,
+                modelFileSizeBytes = modelFileSizeBytes,
+                modelRuntimeMemoryBytes = modelRuntimeMemoryBytes,
+                temperatureCelsius = temperatureCelsius,
+                temperatureTrendLabel = temperatureTrendLabel,
+                threadCount = threadCount,
+                totalRamBytes = totalRamBytes,
+                onToggleProfessionalMonitor = onToggleProfessionalMonitor,
+            )
             ConfigCard(
                 availableChunkDurations = availableChunkDurations,
                 availableLanguageModes = availableLanguageModes,
@@ -248,6 +289,106 @@ private fun MainScreen(
                 onToggleTimestampVisibility = onToggleTimestampVisibility,
             )
             LogCard(isDarkTheme = isDarkTheme, log = activityLog)
+        }
+    }
+}
+
+@Composable
+private fun PerformanceCard(
+    appMemoryBytes: Long?,
+    appCpuUsagePercent: Float?,
+    availableRamBytes: Long?,
+    isDarkTheme: Boolean,
+    isProcessing: Boolean,
+    isProfessionalMonitorEnabled: Boolean,
+    memoryPressureLabel: String,
+    modelFileSizeBytes: Long?,
+    modelRuntimeMemoryBytes: Long?,
+    temperatureCelsius: Float?,
+    temperatureTrendLabel: String,
+    threadCount: Int?,
+    totalRamBytes: Long?,
+    onToggleProfessionalMonitor: () -> Unit,
+) {
+    val containerColor = if (isDarkTheme) Color(0xFF111827) else Color(0xFFF7FBFF)
+    val titleColor = if (isDarkTheme) Color(0xFFE5E7EB) else Color(0xFF11243A)
+    val bodyColor = if (isDarkTheme) Color(0xFF9CA3AF) else Color(0xFF4A6179)
+    val emphasisColor = if (isDarkTheme) Color(0xFFB6E5DF) else Color(0xFF0F5C65)
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = containerColor.copy(alpha = 0.95f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "性能监控",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = titleColor,
+                    fontWeight = FontWeight.Bold
+                )
+                TextButton(onClick = onToggleProfessionalMonitor) {
+                    Text(if (isProfessionalMonitorEnabled) "简洁模式" else "专业模式")
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "这里会实时显示模型相关内存和手机剩余内存，转写进行中刷新会更快。",
+                color = bodyColor
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "模型文件大小：${modelFileSizeBytes?.let(::formatBytes) ?: "尚未选择"}",
+                color = bodyColor
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "模型运行占用：${formatRuntimeModelMemory(modelRuntimeMemoryBytes, isProcessing)}",
+                color = emphasisColor,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "当前 App 内存：${appMemoryBytes?.let(::formatBytes) ?: "检测中"}",
+                color = bodyColor
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "本机剩余内存：${formatAvailableRam(availableRamBytes, totalRamBytes)}",
+                color = bodyColor
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "内存状态：$memoryPressureLabel",
+                color = if (memoryPressureLabel == "正常") bodyColor else emphasisColor,
+                fontWeight = if (memoryPressureLabel == "正常") FontWeight.Normal else FontWeight.SemiBold
+            )
+            if (isProfessionalMonitorEnabled) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "App CPU：${formatCpuUsage(appCpuUsagePercent)}",
+                    color = bodyColor
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "线程数：${threadCount?.toString() ?: "检测中"}",
+                    color = bodyColor
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "设备温度：${formatTemperature(temperatureCelsius)}",
+                    color = bodyColor
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "温度趋势：$temperatureTrendLabel",
+                    color = if (temperatureTrendLabel == "稳定") bodyColor else emphasisColor,
+                    fontWeight = if (temperatureTrendLabel == "稳定") FontWeight.Normal else FontWeight.SemiBold
+                )
+            }
         }
     }
 }
@@ -619,6 +760,50 @@ private fun formatDuration(durationMs: Long): String {
         String.format("%d:%02d:%02d", hours, minutes, seconds)
     } else {
         String.format("%02d:%02d", minutes, seconds)
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    val safeBytes = bytes.coerceAtLeast(0L).toDouble()
+    val gb = 1024.0 * 1024.0 * 1024.0
+    val mb = 1024.0 * 1024.0
+    return if (safeBytes >= gb) {
+        String.format(Locale.getDefault(), "%.2f GB", safeBytes / gb)
+    } else {
+        String.format(Locale.getDefault(), "%.0f MB", safeBytes / mb)
+    }
+}
+
+private fun formatRuntimeModelMemory(bytes: Long?, isProcessing: Boolean): String {
+    return when {
+        bytes == null && isProcessing -> "检测中"
+        bytes == null -> "等待加载"
+        bytes == 0L && !isProcessing -> "空闲中"
+        else -> "约 ${formatBytes(bytes)}"
+    }
+}
+
+private fun formatCpuUsage(value: Float?): String {
+    return if (value == null) {
+        "检测中"
+    } else {
+        String.format(Locale.getDefault(), "%.1f%%", value)
+    }
+}
+
+private fun formatTemperature(value: Float?): String {
+    return if (value == null) {
+        "不可用"
+    } else {
+        String.format(Locale.getDefault(), "%.1f°C", value)
+    }
+}
+
+private fun formatAvailableRam(availableRamBytes: Long?, totalRamBytes: Long?): String {
+    return if (availableRamBytes == null || totalRamBytes == null || totalRamBytes <= 0L) {
+        "检测中"
+    } else {
+        "${formatBytes(availableRamBytes)} / ${formatBytes(totalRamBytes)}"
     }
 }
 
